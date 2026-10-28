@@ -67,6 +67,13 @@ jobs:
           cp ../config/jdcloud_re-ss-01.config .config
           make defconfig
 
+      - name: 预设默认密码 admin
+        run: |
+          mkdir -p files/etc
+          HASH=$(openssl passwd -1 admin)
+          echo "root:$HASH:0:0:99999:7:::" > files/etc/shadow
+          cat files/etc/shadow
+
       - name: 下载所有编译包
         run: |
           cd openwrt
