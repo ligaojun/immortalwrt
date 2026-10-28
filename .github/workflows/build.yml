@@ -13,10 +13,11 @@ on:
     paths:
       - '.github/workflows/build.yml'
       - 'config/jdcloud_re-ss-01.config'
+      - 'files/**'
 
 env:
   REPO_URL: https://github.com/immortalwrt/immortalwrt.git
-  REPO_BRANCH: openwrt-25.12
+  REPO_BRANCH: master
   DEVICE_PROFILE: jdcloud_re-ss-01
   TARGET: qualcommax
   SUBTARGET: ipq60xx
@@ -25,6 +26,8 @@ jobs:
   build:
     runs-on: ubuntu-22.04
     timeout-minutes: 180
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout
@@ -74,7 +77,7 @@ jobs:
         run: |
           cd openwrt
           nproc
-          make -j$(nproc) V=s || make -j1 V=s
+          make -j$(nproc) V=s FILES=../files || make -j1 V=s FILES=../files
 
       - name: 列出编译产物
         run: |
@@ -103,6 +106,8 @@ jobs:
             - Target: qualcommax/ipq60xx
             - Device: JDCloud RE-SS-01
             - 包含 iStore 应用商店 (luci-app-store)
+            - 默认 IP: 192.168.12.1
+            - 默认账号: root / admin
             - 编译 commit: ${{ github.sha }}
           draft: false
           prerelease: false
