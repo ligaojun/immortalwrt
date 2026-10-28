@@ -1,0 +1,108 @@
+name: Build ImmortalWrt for JDCloud RE-SS-01
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '固件版本标签（留空则自动生成日期）'
+        required: false
+        default: ''
+  push:
+    branches:
+      - master
+    paths:
+      - '.github/workflows/build.yml'
+      - 'config/jdcloud_re-ss-01.config'
+
+env:
+  REPO_URL: https://github.com/immortalwrt/immortalwrt.git
+  REPO_BRANCH: openwrt-25.12
+  DEVICE_PROFILE: jdcloud_re-ss-01
+  TARGET: qualcommax
+  SUBTARGET: ipq60xx
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 180
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: 安装编译依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential clang flex bison g++ gawk \
+            gcc-multilib g++-multilib gettext git libncurses5-dev libssl-dev \
+            python3-setuptools python3-dev python3-pyelftools rsync unzip \
+            zlib1g-dev swig libpython3-dev
+          sudo apt-get clean
+
+      - name: 克隆 ImmortalWrt 源码
+        run: |
+          git clone ${{ env.REPO_URL }} -b ${{ env.REPO_BRANCH }} openwrt
+          cd openwrt
+          git --no-pager log -1 --oneline
+
+      - name: 添加 iStore Feed（luci-app-store）
+        run: |
+          cd openwrt
+          cp feeds.conf.default feeds.conf
+          echo 'src-git istore https://github.com/linkease/istore;main' >> feeds.conf
+          cat feeds.conf
+
+      - name: 更新并安装 Feeds
+        run: |
+          cd openwrt
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+      - name: 应用设备配置
+        run: |
+          cd openwrt
+          cp ../config/jdcloud_re-ss-01.config .config
+          make defconfig
+
+      - name: 下载所有编译包
+        run: |
+          cd openwrt
+          make download -j8
+          make download -j1 || true
+
+      - name: 开始编译固件
+        run: |
+          cd openwrt
+          nproc
+          make -j$(nproc) V=s || make -j1 V=s
+
+      - name: 列出编译产物
+        run: |
+          cd openwrt
+          ls -lh bin/targets/qualcommax/ipq60xx/ || true
+          find bin/targets/qualcommax/ipq60xx/ -name "*.bin" -o -name "*.img" | head -20
+
+      - name: 上传固件为 Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: immortalwrt-jdcloud-re-ss-01
+          path: openwrt/bin/targets/qualcommax/ipq60xx/*
+          retention-days: 30
+
+      - name: 发布到 GitHub Release
+        if: success()
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.version != '' && github.event.inputs.version || format('ss01-{0}', github.run_number) }}
+          name: JDCloud RE-SS-01 固件 ${{ github.run_number }}
+          files: |
+            openwrt/bin/targets/qualcommax/ipq60xx/*.bin
+            openwrt/bin/targets/qualcommax/ipq60xx/*.img
+          body: |
+            ## 京东云 RE-SS-01 自定义固件
+            - Target: qualcommax/ipq60xx
+            - Device: JDCloud RE-SS-01
+            - 包含 iStore 应用商店 (luci-app-store)
+            - 编译 commit: ${{ github.sha }}
+          draft: false
+          prerelease: false
