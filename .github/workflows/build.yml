@@ -75,12 +75,18 @@ jobs:
           sed -i 's#\$(PKG_BUILD_DIR)/\$(GNU_TARGET_NAME)\*/fficonfig.h#$(PKG_BUILD_DIR)/*/fficonfig.h#' "$F"
           echo "==== patched fficonfig.h line ===="
           grep -n fficonfig.h "$F"
+      - name: 复制仓库自定义配置到源码树 files（避免与 kmod FILES 变量冲突）
+        run: |
+          mkdir -p openwrt/files
+          cp -a files/. openwrt/files/
+          find openwrt/files -type f | sort
+
       - name: 预设默认密码 admin
         run: |
-          mkdir -p files/etc
+          mkdir -p openwrt/files/etc
           HASH=$(openssl passwd -1 admin)
-          echo "root:$HASH:0:0:99999:7:::" > files/etc/shadow
-          cat files/etc/shadow
+          echo "root:$HASH:0:0:99999:7:::" > openwrt/files/etc/shadow
+          cat openwrt/files/etc/shadow
 
       - name: 下载所有编译包
         run: |
@@ -92,7 +98,7 @@ jobs:
         run: |
           cd openwrt
           nproc
-          make -j$(nproc) V=s FILES=../files || make -j1 V=s FILES=../files
+          make -j$(nproc) V=s || make -j1 V=s
 
       - name: 列出编译产物
         run: |
