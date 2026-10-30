@@ -67,6 +67,14 @@ jobs:
           cp ../config/jdcloud_re-ss-01.config .config
           make defconfig
 
+      - name: 修补 libffi fficonfig.h 安装路径（兼容构建目录名）
+        run: |
+          cd openwrt
+          F=package/libs/libffi/Makefile
+          grep -n fficonfig.h "$F" || true
+          sed -i 's#\$(PKG_BUILD_DIR)/\$(GNU_TARGET_NAME)\*/fficonfig.h#$(PKG_BUILD_DIR)/*/fficonfig.h#' "$F"
+          echo "==== patched fficonfig.h line ===="
+          grep -n fficonfig.h "$F"
       - name: 预设默认密码 admin
         run: |
           mkdir -p files/etc
