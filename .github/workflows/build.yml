@@ -75,6 +75,32 @@ jobs:
           sed -i 's#\$(PKG_BUILD_DIR)/\$(GNU_TARGET_NAME)\*/fficonfig.h#$(PKG_BUILD_DIR)/*/fficonfig.h#' "$F"
           echo "==== patched fficonfig.h line ===="
           grep -n fficonfig.h "$F"
+
+      - name: 为 RE-SS-01 补充 factory.bin 生成规则（支持原厂/首次 U-Boot Web 刷机）
+        run: |
+          cd openwrt
+          F=target/linux/qualcommax/image/ipq60xx.mk
+          python3 - <<'PY'
+          import io
+          p="target/linux/qualcommax/image/ipq60xx.mk"
+          t=io.open(p,encoding="utf-8").read()
+          marker="define Device/jdcloud_re-ss-01"
+          end="endef"
+          i=t.find(marker)
+          assert i>=0, "device block not found: "+marker
+          j=t.find(end, i)
+          assert j>=0, "endef not found after "+marker
+          if "factory.bin :=" not in t:
+              insert="\t$(call Device/EmmcImage)\n\tIMAGE/factory.bin := append-kernel | pad-to $$(KERNEL_SIZE) | append-rootfs | append-metadata\n"
+              t=t[:j]+insert+t[j:]
+              io.open(p,"w",encoding="utf-8",newline="\n").write(t)
+              print("inserted factory rule")
+          else:
+              print("factory rule already present")
+          PY
+          echo "==== RE-SS-01 device block after patch ===="
+          awk '/define Device\/jdcloud_re-ss-01/,/endef/' "$F"
+
       - name: 复制仓库自定义配置到源码树 files（避免与 kmod FILES 变量冲突）
         run: |
           mkdir -p openwrt/files
