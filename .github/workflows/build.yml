@@ -90,13 +90,14 @@ jobs:
           assert i>=0, "device block not found: "+marker
           j=t.find(end, i)
           assert j>=0, "endef not found after "+marker
-          if "factory.bin :=" not in t:
+          block=t[i:j]
+          if "IMAGE/factory.bin" not in block:
               insert="\t$(call Device/EmmcImage)\n\tIMAGE/factory.bin := append-kernel | pad-to $$(KERNEL_SIZE) | append-rootfs | append-metadata\n"
               t=t[:j]+insert+t[j:]
               io.open(p,"w",encoding="utf-8",newline="\n").write(t)
-              print("inserted factory rule")
+              print("inserted factory rule for jdcloud_re-ss-01")
           else:
-              print("factory rule already present")
+              print("factory rule already in jdcloud block")
           PY
           echo "==== RE-SS-01 device block after patch ===="
           awk '/define Device\/jdcloud_re-ss-01/,/endef/' "$F"
@@ -131,6 +132,11 @@ jobs:
           cd openwrt
           ls -lh bin/targets/qualcommax/ipq60xx/ || true
           find bin/targets/qualcommax/ipq60xx/ -name "*.bin" -o -name "*.img" | head -20
+          if ls bin/targets/qualcommax/ipq60xx/*factory.bin >/dev/null 2>&1; then
+            echo "== FACTORY_BIN OK =="
+          else
+            echo "== FACTORY_BIN MISSING =="
+          fi
 
       - name: 上传固件为 Artifact
         uses: actions/upload-artifact@v4
