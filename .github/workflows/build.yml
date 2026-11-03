@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'åºä»¶çæ¬æ ç­¾ï¼çç©ºåèªå¨çææ¥æï¼'
+        description: '固件版本标签（留空则自动生成日期）'
         required: false
         default: ''
   push:
@@ -33,7 +33,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: å®è£ç¼è¯ä¾èµ
+      - name: 安装编译依赖
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential clang flex bison g++ gawk \
@@ -42,37 +42,37 @@ jobs:
             zlib1g-dev swig libpython3-dev
           sudo apt-get clean
 
-      - name: åé ImmortalWrt æºç 
+      - name: 克隆 ImmortalWrt 源码
         run: |
           git clone ${{ env.REPO_URL }} -b ${{ env.REPO_BRANCH }} openwrt
           cd openwrt
           git --no-pager log -1 --oneline
 
-      - name: æ·»å  iStore Feedï¼luci-app-storeï¼
+      - name: 添加 iStore Feed（luci-app-store）
         run: |
           cd openwrt
           cp feeds.conf.default feeds.conf
           echo 'src-git istore https://github.com/linkease/istore;main' >> feeds.conf
           cat feeds.conf
 
-      - name: æ´æ°å¹¶å®è£ Feeds
+      - name: 更新并安装 Feeds
         run: |
           cd openwrt
           ./scripts/feeds update -a
           ./scripts/feeds install -a
-          echo '==== å¼ºå¶å®è£ iStore ç luci-app-store ===='
+          echo '==== 强制安装 iStore 的 luci-app-store ===='
           ./scripts/feeds install -p istore luci-app-store 2>&1 | tail -10 || true
           ls package/feeds/istore/ 2>/dev/null || true
 
-      - name: åºç¨è®¾å¤éç½®
+      - name: 应用设备配置
         run: |
           cd openwrt
           cp ../config/jdcloud_re-ss-01.config .config
           make defconfig
-          echo '==== éªè¯ luci-app-store æ¯å¦è¢« defconfig ä¿ç ===='
+          echo '==== 验证 luci-app-store 是否被 defconfig 保留 ===='
           grep -q 'CONFIG_PACKAGE_luci-app-store=y' .config && echo STORE_OK || echo STORE_MISSING_IN_CONFIG
 
-      - name: ä¿®è¡¥ libffi fficonfig.h å®è£è·¯å¾ï¼å¼å®¹æå»ºç®å½åï¼
+      - name: 修补 libffi fficonfig.h 安装路径（兼容构建目录名）
         run: |
           cd openwrt
           F=package/libs/libffi/Makefile
@@ -81,7 +81,7 @@ jobs:
           echo "==== patched fficonfig.h line ===="
           grep -n fficonfig.h "$F"
 
-      - name: ä¸º RE-SS-01 è¡¥å factory.bin çæè§åï¼æ¯æåå/é¦æ¬¡ U-Boot Web å·æºï¼
+      - name: 为 RE-SS-01 补充 factory.bin 生成规则（支持原厂/首次 U-Boot Web 刷机）
         run: |
           cd openwrt
           F=target/linux/qualcommax/image/ipq60xx.mk
@@ -107,32 +107,32 @@ jobs:
           echo "==== RE-SS-01 device block after patch ===="
           awk '/define Device\/jdcloud_re-ss-01/,/endef/' "$F"
 
-      - name: å¤å¶ä»åºèªå®ä¹éç½®å°æºç æ  filesï¼é¿åä¸ kmod FILES åéå²çªï¼
+      - name: 复制仓库自定义配置到源码树 files（避免与 kmod FILES 变量冲突）
         run: |
           mkdir -p openwrt/files
           cp -a files/. openwrt/files/
           find openwrt/files -type f | sort
 
-      - name: é¢è®¾é»è®¤å¯ç  admin
+      - name: 预设默认密码 admin
         run: |
           mkdir -p openwrt/files/etc
           HASH=$(openssl passwd -1 admin)
           echo "root:$HASH:0:0:99999:7:::" > openwrt/files/etc/shadow
           cat openwrt/files/etc/shadow
 
-      - name: ä¸è½½ææç¼è¯å
+      - name: 下载所有编译包
         run: |
           cd openwrt
           make download -j8
           make download -j1 || true
 
-      - name: å¼å§ç¼è¯åºä»¶
+      - name: 开始编译固件
         run: |
           cd openwrt
           nproc
           make -j$(nproc) V=s || make -j1 V=s
 
-      - name: ååºç¼è¯äº§ç©
+      - name: 列出编译产物
         run: |
           cd openwrt
           ls -lh bin/targets/qualcommax/ipq60xx/ || true
@@ -143,29 +143,29 @@ jobs:
             echo "== FACTORY_BIN MISSING =="
           fi
 
-      - name: ä¸ä¼ åºä»¶ä¸º Artifact
+      - name: 上传固件为 Artifact
         uses: actions/upload-artifact@v4
         with:
           name: immortalwrt-jdcloud-re-ss-01
           path: openwrt/bin/targets/qualcommax/ipq60xx/*
           retention-days: 30
 
-      - name: åå¸å° GitHub Release
+      - name: 发布到 GitHub Release
         if: success()
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.inputs.version != '' && github.event.inputs.version || format('ss01-{0}', github.run_number) }}
-          name: JDCloud RE-SS-01 åºä»¶ ${{ github.run_number }}
+          name: JDCloud RE-SS-01 固件 ${{ github.run_number }}
           files: |
             openwrt/bin/targets/qualcommax/ipq60xx/*.bin
             openwrt/bin/targets/qualcommax/ipq60xx/*.img
           body: |
-            ## äº¬ä¸äº RE-SS-01 èªå®ä¹åºä»¶
+            ## 京东云 RE-SS-01 自定义固件
             - Target: qualcommax/ipq60xx
             - Device: JDCloud RE-SS-01
-            - åå« iStore åºç¨ååº (luci-app-store)
-            - é»è®¤ IP: 192.168.12.1
-            - é»è®¤è´¦å·: root / admin
-            - ç¼è¯ commit: ${{ github.sha }}
+            - 包含 iStore 应用商店 (luci-app-store)
+            - 默认 IP: 192.168.12.1
+            - 默认账号: root / admin
+            - 编译 commit: ${{ github.sha }}
           draft: false
           prerelease: false
